@@ -342,6 +342,7 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
             self.moments = None
             self.lumigrid_my_beam = None  # NEW
             self.lumigrid_other_beam = None  # NEW
+            self.lumigrid_visualisation = None  # NEW
 
         else:
             self.config_for_update = None
@@ -377,7 +378,7 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
                 self.config_for_update.slicer.num_slices*(1+6+10), dtype=float)
             if flag_numerical_luminosity == 1:
                 self.partner_lumigrid = self._buffer.context.nplike_lib.zeros(
-                    int(n_lumigrid_cells)**2, dtype=float)  # NEW, nxn flattened grid, int but concat will make it float anyway
+                    int(n_lumigrid_cells)**2*n_slices, dtype=float)  # NEW, nxn flattened grid, int but concat will make it float anyway
 #                    int(n_lumigrid_cells)**2*n_slices, dtype=float)  # NEW, nxn flattened grid, int but concat will make it float anyway
                 self.partner_buffer = np.hstack([self.partner_moments, self.partner_lumigrid])  # NEW
             elif flag_numerical_luminosity == 0:
@@ -760,8 +761,8 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
     def update_from_received_lumigrid(self):  # NEW
         lumigrid_other_beam = self._arr2ctx(self.partner_lumigrid)  # need to flip x dimension
         self.lumigrid_other_beam = self._buffer.context.nplike_lib.hstack([lumigrid_other_beam[:]])  # x dim flipped, still 1D buffer
-        self.lumigrid_other_beam = self.lumigrid_other_beam.reshape(int(self.n_lumigrid_cells), int(self.n_lumigrid_cells)) #unflattened lumigrid NEW.reshape(original_shape) #unflattened lumigrid NEW
-        self.lumigrid_other_beam = self.lumigrid_other_beam[::-1, :]
+        self.lumigrid_other_beam = self.lumigrid_other_beam.reshape(int(self.n_lumigrid_cells), int(self.n_lumigrid_cells), int(len(self.lumigrid_other_beam) / (self.n_lumigrid_cells**2))) #unflattened lumigrid NEW.reshape(original_shape) #unflattened lumigrid NEW
+        self.lumigrid_other_beam = self.lumigrid_other_beam[::-1, :,:]
         
     def _track_collective(self, particles, _force_suspend=False):
         if self.config_for_update._working_on_bunch is not None:
@@ -844,15 +845,22 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
                     self.moments = self.config_for_update.slicer.compute_moments(particles,update_assigned_slices=False)
                     
                     nx, ny = self.n_lumigrid_cells, self.n_lumigrid_cells
-                    j = self.config_for_update._i_step + 1 if self.config_for_update._i_step <= self.config_for_update.slicer.num_slices//2 + 1 else 2 * self.config_for_update.slicer.num_slices - 1 - self.config_for_update._i_step # Gives the number of interacting slices for each timestep   
-                    lumi_slice = np.zeros((nx , ny, j))
+                    # if self.config_for_update.slicer.num_slices < 5:
+                    #     j = self.config_for_update._i_step + 1 if self.config_for_update._i_step < self.config_for_update.slicer.num_slices//2 + 1 else 2 * self.config_for_update.slicer.num_slices - 1 - self.config_for_update._i_step # Gives the number of interacting slices for each timestep   
+                    # else:
+                    #     j = self.config_for_update._i_step + 1 if self.config_for_update._i_step <= self.config_for_update.slicer.num_slices//2 + 1 else 2 * self.config_for_update.slicer.num_slices - 1 - self.config_for_update._i_step # Gives the number of interacting slices for each timestep   
+                    start = max(0, self.config_for_update._i_step - (self.config_for_update.slicer.num_slices - 1))
+                    stop = min(self.config_for_update.slicer.num_slices - 1, self.config_for_update._i_step) + 1
+                    j = stop - start
+                    print(self.config_for_update._i_step)
+                    print(j)
+                    self.lumigrid_my_beam = np.zeros((nx , ny, j))
+                    self.lumigrid_visualisation = np.zeros((nx, ny, 2*self.config_for_update.slicer.num_slices - 1))
                     #print(np.shape(lumi_slice))
                     #print("num_slices =", self.config_for_update.slicer.num_slices)
                     #print("_i_step =", self.config_for_update._i_step)
                     
-                    #start = max(0, self.config_for_update._i_step - 1 - (self.config_for_update.slicer.num_slices // 2)) # WRONG for ns>=5
-                    start = max(0, self.config_for_update._i_step - (self.config_for_update.slicer.num_slices - 1))
-                    stop = min(self.config_for_update.slicer.num_slices - 1, self.config_for_update._i_step) + 1
+                    #start = max(0, self.config_for_update._i_step - 1 - (self.config_for_update.slicer.num_slices // 2))
 
                     #print(f"Looping from i={start} to i={stop - 1}")
                     #print(max(0, self.config_for_update._i_step - 1 - (self.config_for_update.slicer.num_slices//2)))
@@ -910,18 +918,27 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
                             self.dy = fmap.dy
                             # print("dz: ", fmap.dz)
                             # print(fmap)
-                            lumi_slice[:,:,lumi_index] = np.array(fmap.rho[:,:,1])
-                            #print("lumi_slice:", lumi_slice)
-                            self.lumigrid_my_beam = np.sum(lumi_slice, axis=-1) # sum along z
+                            self.lumigrid_my_beam[:,:,lumi_index] = np.array(fmap.rho[:,:,1])
+                            # print("lumi_slice:", lumi_slice)
+                            #print(np.shape(self.lumigrid_sum))
+                            #print(np.shape(np.sum(self.lumigrid_my_beam, axis = -1).flatten()))
+                            #self.lumigrid_visualisation[:] = np.sum(self.lumigrid_my_beam, axis=-1) # sum along z
+                            #self.lumigrid_sum[:,:,lumi_index] = np.sum(self.lumigrid_my_beam, axis=-1).flatten() # sum along z
                             #print(np.shape(self.lumigrid_my_beam))
                             #print(np.shape(self.lumigrid_sum))
-                            if self.update_lumigrid_sum ==1:  
-                                self.lumigrid_sum[self.config_for_update._i_step*nx*ny:(self.config_for_update._i_step+1)*nx*ny] = self.lumigrid_my_beam.flatten() # sum along z
-                            exchange_buffer = self._buffer.context.nplike_lib.hstack([self.moments, self.lumigrid_my_beam.flatten()]) #flattened to 1D
-
+                            if self.update_lumigrid_sum ==1:
+                                self.lumigrid_visualisation[:,:,self.config_for_update._i_step] = np.sum(self.lumigrid_my_beam, axis=-1) # sum along z  
+                                #self.lumigrid_visualisation[self.config_for_update._i_step*nx*ny:(self.config_for_update._i_step+1)*nx*ny] = self.lumigrid_my_beam.flatten() # sum along z
+                            pad = np.zeros(nx*ny*(self.config_for_update.slicer.num_slices - j))
+                            #print(len(pad))
+                            exchange_buffer = self._buffer.context.nplike_lib.hstack([self.moments, self._buffer.context.nplike_lib.hstack([self.lumigrid_my_beam.flatten() for i in range(np.shape(self.lumigrid_my_beam)[-1] - (j-1))]), pad]) # flattened to 1D, change i in range to for x in range, maybe i is getting too high??
+                            #print(np.shape(self.moments))
+                            print("Lumigrid my beam dimensions:", np.shape(self.lumigrid_my_beam)) # need 3rd dimension to change correctly
+                            print("Flattened lumigrid_my_beam size:", len(self.lumigrid_my_beam.flatten()))
+                            #print(len(self._buffer.context.nplike_lib.hstack([self.lumigrid_my_beam.flatten() for i in range(np.shape(self.lumigrid_my_beam)[-1])])))
                         elif self.flag_numerical_luminosity == 0:
                             exchange_buffer = self._buffer.context.nplike_lib.hstack([self.moments])
-                        self.config_for_update.pipeline_manager.send_message(exchange_buffer, #NEW
+                        self.config_for_update.pipeline_manager.send_message(exchange_buffer,
                                                     self.config_for_update.element_name,
                                                     particles.name,
                                                     self.config_for_update.partner_particles_name,
@@ -930,6 +947,9 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
                         self.synchro_beam_kick(particles=particles,
                                         i_slice_for_particles=self.config_for_update._other_beam_slice_index_for_particles) # Do I need to only synchro_beam_kick for the particles in the slice being interacted with?
 
+                        
+                        
+                        
                 if self.config_for_update.pipeline_manager.is_ready_to_receive(self.config_for_update.element_name,
                                     self.config_for_update.partner_particles_name,
                                     particles.name,
@@ -963,16 +983,23 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
 
             if self.flag_numerical_luminosity == 1:
                 #print(self.lumigrid_other_beam)
-                self.numlumitable.numerical_luminosity[at_turn] = compute_lumi_integral(timestep=self.config_for_update._i_step, 
-                    lumigrid_my_beam=self.lumigrid_my_beam, 
-                    lumigrid_other_beam=self.lumigrid_other_beam,
-                    frev = self.frev,
-                    beam_intensity = particles.weight[0]*particles._capacity, other_beam_intensity = particles.weight[0]*particles._capacity, dx = self.dx, dy = self.dy)  # NEW, C function to compute integral based on 2 grids at timestep _i_step, grids contain the status at _i_step for every slice but only overlapping will interact
-                print("frev: ", self.frev)
-                print("beam_intensity: ", particles.weight[0]*particles._capacity)
-                print("other_beam_intensity: ", particles.weight[0]*particles._capacity)
-                print("dx: ", self.dx)
-                print("dy: ", self.dy)
+                #j = self.config_for_update._i_step + 1 if self.config_for_update._i_step <= self.config_for_update.slicer.num_slices//2 + 1 else 2 * self.config_for_update.slicer.num_slices - 1 - self.config_for_update._i_step # Gives the number of interacting slices for each timestep   
+                for i in range(max(0, (self.config_for_update._i_step - (self.config_for_update.slicer.num_slices - 1))), min(self.config_for_update.slicer.num_slices - 1, self.config_for_update._i_step) + 1):
+                    #start = max(0, self.config_for_update._i_step - (self.config_for_update.slicer.num_slices - 1))
+                    #j = self.config_for_update._i_step + 1 if self.config_for_update._i_step <= self.config_for_update.slicer.num_slices//2 + 1 else 2 * self.config_for_update.slicer.num_slices - 1 - self.config_for_update._i_step # Gives the number of interacting slices for each timestep   
+                    other_beam_index = self.config_for_update.slicer.num_slices - 1 + i - self.config_for_update._i_step
+                    self.numlumitable.numerical_luminosity[at_turn] += compute_lumi_integral(timestep=self.config_for_update._i_step, 
+                        lumigrid_my_beam=self.lumigrid_my_beam[:,:,i-start], 
+                        lumigrid_other_beam=self.lumigrid_other_beam[:,:,other_beam_index],
+                        frev = self.frev,
+                        beam_intensity = particles.weight[0]*particles._capacity, other_beam_intensity = particles.weight[0]*particles._capacity, dx = self.dx, dy = self.dy)  # NEW, C function to compute integral based on 2 grids at timestep _i_step, grids contain the status at _i_step for every slice but only overlapping will interact
+                    #print("Lumigrid my beam slice element: ", self.lumigrid_my_beam[:,:,i-start])
+                    #print("Lumigrid other beam slice element: ", self.lumigrid_other_beam[:,:,other_beam_index])
+                    #print("frev: ", self.frev)
+                    #print("other_beam_intensity: ", particles.weight[0]*particles._capacity)
+                    #print("beam_intensity: ", particles.weight[0]*particles._capacity)
+                    #print("dx: ", self.dx)
+                    #print("dy: ", self.dy)
             self.config_for_update._i_step += 1
             if self.config_for_update._i_step == (
                             n_slices_self_beam + self.num_slices_other_beam - 1):
