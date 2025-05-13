@@ -762,7 +762,9 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
         lumigrid_other_beam = self._arr2ctx(self.partner_lumigrid)  # need to flip x dimension
         self.lumigrid_other_beam = self._buffer.context.nplike_lib.hstack([lumigrid_other_beam[:]])  # x dim flipped, still 1D buffer
         self.lumigrid_other_beam = self.lumigrid_other_beam.reshape(int(self.n_lumigrid_cells), int(self.n_lumigrid_cells), int(len(self.lumigrid_other_beam) / (self.n_lumigrid_cells**2))) #unflattened lumigrid NEW.reshape(original_shape) #unflattened lumigrid NEW
+        print(np.sum(self.lumigrid_other_beam))
         self.lumigrid_other_beam = self.lumigrid_other_beam[::-1, :,:]
+        print(np.sum(self.lumigrid_other_beam))
         
     def _track_collective(self, particles, _force_suspend=False):
         if self.config_for_update._working_on_bunch is not None:
@@ -845,15 +847,12 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
                     self.moments = self.config_for_update.slicer.compute_moments(particles,update_assigned_slices=False)
                     
                     nx, ny = self.n_lumigrid_cells, self.n_lumigrid_cells
-                    # if self.config_for_update.slicer.num_slices < 5:
-                    #     j = self.config_for_update._i_step + 1 if self.config_for_update._i_step < self.config_for_update.slicer.num_slices//2 + 1 else 2 * self.config_for_update.slicer.num_slices - 1 - self.config_for_update._i_step # Gives the number of interacting slices for each timestep   
-                    # else:
-                    #     j = self.config_for_update._i_step + 1 if self.config_for_update._i_step <= self.config_for_update.slicer.num_slices//2 + 1 else 2 * self.config_for_update.slicer.num_slices - 1 - self.config_for_update._i_step # Gives the number of interacting slices for each timestep   
+                    
                     start = max(0, self.config_for_update._i_step - (self.config_for_update.slicer.num_slices - 1))
                     stop = min(self.config_for_update.slicer.num_slices - 1, self.config_for_update._i_step) + 1
                     j = stop - start
-                    print(self.config_for_update._i_step)
-                    print(j)
+                    #print(self.config_for_update._i_step)
+                    #print(j)
                     self.lumigrid_my_beam = np.zeros((nx , ny, j))
                     self.lumigrid_visualisation = np.zeros((nx, ny, 2*self.config_for_update.slicer.num_slices - 1))
                     #print(np.shape(lumi_slice))
@@ -868,6 +867,13 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
                     #print(min(self.config_for_update.slicer.num_slices - 1, self.config_for_update._i_step) + 1)
 
                     for i in range(max(0, (self.config_for_update._i_step - (self.config_for_update.slicer.num_slices - 1))), min(self.config_for_update.slicer.num_slices - 1, self.config_for_update._i_step) + 1):
+                        
+                        #start = max(0, self.config_for_update._i_step - (self.config_for_update.slicer.num_slices - 1))
+                        #stop = min(self.config_for_update.slicer.num_slices - 1, self.config_for_update._i_step) + 1
+                        #j = stop - start
+                        
+                        #self.lumigrid_my_beam = np.zeros((nx , ny, j+start))
+                        #self.lumigrid_visualisation = np.zeros((nx, ny, 2*self.config_for_update.slicer.num_slices - 1))
                         
                         lumi_index = i - start # apply correction to the index to get the correct slice number
                         # Loop over slices
@@ -933,8 +939,8 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
                             #print(len(pad))
                             exchange_buffer = self._buffer.context.nplike_lib.hstack([self.moments, self._buffer.context.nplike_lib.hstack([self.lumigrid_my_beam.flatten() for i in range(np.shape(self.lumigrid_my_beam)[-1] - (j-1))]), pad]) # flattened to 1D, change i in range to for x in range, maybe i is getting too high??
                             #print(np.shape(self.moments))
-                            print("Lumigrid my beam dimensions:", np.shape(self.lumigrid_my_beam)) # need 3rd dimension to change correctly
-                            print("Flattened lumigrid_my_beam size:", len(self.lumigrid_my_beam.flatten()))
+                            #print("Lumigrid my beam dimensions:", np.shape(self.lumigrid_my_beam)) # need 3rd dimension to change correctly
+                            #print("Flattened lumigrid_my_beam size:", len(self.lumigrid_my_beam.flatten()))
                             #print(len(self._buffer.context.nplike_lib.hstack([self.lumigrid_my_beam.flatten() for i in range(np.shape(self.lumigrid_my_beam)[-1])])))
                         elif self.flag_numerical_luminosity == 0:
                             exchange_buffer = self._buffer.context.nplike_lib.hstack([self.moments])
@@ -980,19 +986,29 @@ class BeamBeamBiGaussian3D(xt.BeamElement):
 
             self.synchro_beam_kick(particles=particles,
                         i_slice_for_particles=self.config_for_update._other_beam_slice_index_for_particles)
-
             if self.flag_numerical_luminosity == 1:
                 #print(self.lumigrid_other_beam)
                 #j = self.config_for_update._i_step + 1 if self.config_for_update._i_step <= self.config_for_update.slicer.num_slices//2 + 1 else 2 * self.config_for_update.slicer.num_slices - 1 - self.config_for_update._i_step # Gives the number of interacting slices for each timestep   
                 for i in range(max(0, (self.config_for_update._i_step - (self.config_for_update.slicer.num_slices - 1))), min(self.config_for_update.slicer.num_slices - 1, self.config_for_update._i_step) + 1):
-                    #start = max(0, self.config_for_update._i_step - (self.config_for_update.slicer.num_slices - 1))
+                    start = max(0, self.config_for_update._i_step - (self.config_for_update.slicer.num_slices - 1))
+                    stop = min(self.config_for_update.slicer.num_slices - 1, self.config_for_update._i_step) + 1
+                    #print("Start for this computation: ",start)
                     #j = self.config_for_update._i_step + 1 if self.config_for_update._i_step <= self.config_for_update.slicer.num_slices//2 + 1 else 2 * self.config_for_update.slicer.num_slices - 1 - self.config_for_update._i_step # Gives the number of interacting slices for each timestep   
-                    other_beam_index = self.config_for_update.slicer.num_slices - 1 + i - self.config_for_update._i_step
+                    print("Sum of the whole my beam: ", np.sum(self.lumigrid_my_beam))
+                    print("Sum of the indexed my beam: ", np.sum(self.lumigrid_my_beam[:,:,i-start]))
+                    sum_lumigrid_my_beam = np.sum(self.lumigrid_my_beam[:,:,i-start])
+                    sum_lumigrid_other_beam = np.sum(self.lumigrid_other_beam)
+                    print("Sum of the whole other beam: ", np.sum(self.lumigrid_other_beam))
+                    print("Sum of my indexed other beam: ", np.sum(self.lumigrid_other_beam[:,:,start+stop-1-(i)]))
+                    #other_beam_index = self.config_for_update.slicer.num_slices - 1 + i - self.config_for_update._i_step
                     self.numlumitable.numerical_luminosity[at_turn] += compute_lumi_integral(timestep=self.config_for_update._i_step, 
                         lumigrid_my_beam=self.lumigrid_my_beam[:,:,i-start], 
-                        lumigrid_other_beam=self.lumigrid_other_beam[:,:,other_beam_index],
+                        lumigrid_other_beam=self.lumigrid_other_beam[:,:,start+stop-1-i],
                         frev = self.frev,
                         beam_intensity = particles.weight[0]*particles._capacity, other_beam_intensity = particles.weight[0]*particles._capacity, dx = self.dx, dy = self.dy)  # NEW, C function to compute integral based on 2 grids at timestep _i_step, grids contain the status at _i_step for every slice but only overlapping will interact
+                    print(self.config_for_update._i_step)
+                    print("Lumigrid my beam indices:", i-start)
+                    print("Lumigrid other beam indices:", start+stop-1-i)
                     #print("Lumigrid my beam slice element: ", self.lumigrid_my_beam[:,:,i-start])
                     #print("Lumigrid other beam slice element: ", self.lumigrid_other_beam[:,:,other_beam_index])
                     #print("frev: ", self.frev)
@@ -1651,6 +1667,12 @@ def compute_lumi_integral(lumigrid_my_beam, lumigrid_other_beam, timestep, frev,
     #print(dx,dy)
     scale1 = 1.0/(sum1*dx*dy)
     scale2 = 1.0/(sum2*dx*dy)
+    if sum2 ==0.0:
+        scale2 = 0.0
+    else:
+        scale2 = 1.0/(sum2*dx*dy)
+    print(f"sum1: {sum1}, dx: {dx}, dy: {dy}, scale1: {scale1}")
+    print(f"sum2: {sum2}, dx: {dx}, dy: {dy}, scale2: {scale2}")
     h1_scaled = lumigrid_my_beam*scale1
     h2_scaled = lumigrid_other_beam*scale2
     h_multiplied = h1_scaled*h2_scaled
@@ -1672,6 +1694,34 @@ def compute_lumi_integral(lumigrid_my_beam, lumigrid_other_beam, timestep, frev,
     numerical_luminosity = beam_intensity*other_beam_intensity*frev*integralf
     return numerical_luminosity # Call C function to compute the integral based on the 2 grids at timestep, grids contain the status at timestep for every slice but only overlapping will interact
 
+
+# def compute_lumi_integral(lumigrid_my_beam, lumigrid_other_beam, timestep, frev, beam_intensity, other_beam_intensity, dx, dy):
+#     sum1 = np.sum(lumigrid_my_beam)
+#     sum2 = np.sum(lumigrid_other_beam)
+
+#     if sum1 == 0 or dx == 0 or dy == 0:
+#         scale1 = 0.0
+#     else:
+#         scale1 = 1.0 / (sum1 * dx * dy)
+
+#     if sum2 == 0 or dx == 0 or dy == 0:
+#         scale2 = 0.0
+#     else:
+#         scale2 = 1.0 / (sum2 * dx * dy)
+
+#     h1_scaled = lumigrid_my_beam * scale1
+#     h2_scaled = lumigrid_other_beam * scale2
+#     h_multiplied = h1_scaled * h2_scaled
+
+#     nx, ny = lumigrid_my_beam.shape
+#     integral = 0.25 * dx * dy * (h_multiplied[0, 0] + h_multiplied[-1, 0] + h_multiplied[0, -1] + h_multiplied[-1, -1])
+#     secondPart = np.sum(h_multiplied[1:, 1:])
+#     thirdPart = np.sum(h_multiplied[1:, [0, -1]])
+#     fourthPart = np.sum(h_multiplied[[0, -1], 1:])
+
+#     integralf = integral + 0.25 * dx * dy * (4 * secondPart + 2 * thirdPart + 2 * fourthPart)
+#     numerical_luminosity = beam_intensity * other_beam_intensity * frev * integralf
+#     return numerical_luminosity
 class ConfigForUpdateBeamBeamBiGaussian3D:
 
     def __init__(self,
